@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emerge - AI Music Search</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            height: 100%;
+            background: #000;
+            color: #ffffff;
+            overflow: hidden;
+        }
+        #scene-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+        }
+        .content {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        h1 {
+            font-size: 5rem;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            animation: colorShift 10s infinite;
+        }
+        @keyframes colorShift {
+            0% { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+            33% { color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+            66% { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+            100% { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+        }
+        .tagline {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        input, button {
+            padding: 1rem;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            transition: all 0.3s ease;
+        }
+        input:focus, button:hover {
+            outline: none;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+        button {
+            background: linear-gradient(45deg, #ff00ff, #00ffff, #ffff00);
+            color: #000000;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        button:hover {
+            transform: scale(1.05);
+            animation: buttonGlow 2s infinite;
+        }
+        @keyframes buttonGlow {
+            0% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(255, 255, 255, 0.8); }
+            100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+        }
+    </style>
+</head>
+<body>
+    <div id="scene-container"></div>
+    <div class="container">
+        <div class="content">
+            <h1>Emerge</h1>
+            <p class="tagline">AI-Powered Music Discovery</p>
+            <form id="signupForm">
+                <input type="email" placeholder="Your email" required>
+                <button type="submit">Join the Sonic Revolution</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, particles, mouseX = 0, mouseY = 0;
+        let audioContext, analyser, dataArray;
+        let isPlaying = false;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('scene-container').appendChild(renderer.domElement);
+
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const colors = [];
+
+            for (let i = 0; i < 20000; i++) {
+                const r = Math.random() * 20 + 5;
+                const theta = Math.random() * 2 * Math.PI;
+                const phi = Math.acos(Math.random() * 2 - 1);
+                
+                const x = r * Math.sin(phi) * Math.cos(theta);
+                const y = r * Math.sin(phi) * Math.sin(theta);
+                const z = r * Math.cos(phi);
+                
+                vertices.push(x, y, z);
+
+                const color = new THREE.Color();
+                color.setHSL(Math.random(), 1, 0.5);
+                colors.push(color.r, color.g, color.b);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.1,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            camera.position.z = 30;
+
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            document.addEventListener('mousemove', onDocumentMouseMove);
+
+            animate();
+        }
+
+        function onDocumentMouseMove(event) {
+            mouseX = (event.clientX - window.innerWidth / 2) / 100;
+            mouseY = (event.clientY - window.innerHeight / 2) / 100;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = Date.now() * 0.0005;
+            particles.rotation.x = time * 0.2 + mouseY * 0.05;
+            particles.rotation.y = time * 0.1 + mouseX * 0.05;
+
+            if (isPlaying) {
+                analyser.getByteFrequencyData(dataArray);
+                const averageFrequency = dataArray.reduce((a, b) => a + b) / dataArray.length;
+
+                const positions = particles.geometry.attributes.position.array;
+                const colors = particles.geometry.attributes.color.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    const scale = 1 + (averageFrequency / 256) * Math.sin(time + i) * 0.3;
+                    positions[i] *= scale;
+                    positions[i + 1] *= scale;
+                    positions[i + 2] *= scale;
+
+                    const hue = (time + i / positions.length) % 1;
+                    const color = new THREE.Color();
+                    color.setHSL(hue, 1, 0.5);
+                    colors[i] = color.r;
+                    colors[i + 1] = color.g;
+                    colors[i + 2] = color.b;
+                }
+                particles.geometry.attributes.position.needsUpdate = true;
+                particles.geometry.attributes.color.needsUpdate = true;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function startAudio() {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            if (!isPlaying) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        const source = audioContext.createMediaStreamSource(stream);
+                        source.connect(analyser);
+                        isPlaying = true;
+                    })
+                    .catch(err => console.error('Error accessing microphone:', err));
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('click', startAudio);
+
+        document.getElementById('signupForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('Welcome to Emerge! Get ready for a mind-bending musical journey.');
+        });
+
+        // Add some trippy animations to the form elements
+        gsap.from('h1', {duration: 2, opacity: 0, scale: 0.5, ease: 'elastic.out(1, 0.3)'});
+        gsap.from('.tagline', {duration: 2, opacity: 0, y: 50, ease: 'elastic.out(1, 0.3)', delay: 0.5});
+        gsap.from('form', {duration: 1, opacity: 0, scale: 0.8, ease: 'back.out(1.7)', delay: 1});
+    </script>
+</body>
+</html>
